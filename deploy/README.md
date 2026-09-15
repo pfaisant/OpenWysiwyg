@@ -88,6 +88,18 @@ The tunnel configuration requires its connectors to restart. **Two existing conn
 
 Verify the public page and actual HTML/rendered switching at `https://wysiwyg.pfa87.cc`, including the source archive download. A healthy localhost response alone does not prove the DNS/tunnel route is live.
 
+### Public access
+
+This hostname has its own exact-host Cloudflare Access application named
+**OpenWysiwyg**, with a public `bypass` policy for `everyone`. It follows the same
+setup as the existing public sites. The `*.pfa87.cc` sign-in application remains
+unchanged; the exact hostname takes precedence over it.
+
+If this editor redirects to Google or Cloudflare sign-in, check its exact-host
+application and policy. Access administration uses the private credential in
+`~/.config/cloudflare/access.env`; the DNS credential in `agent.env` is separate.
+Never change the wildcard application's protection to publish this site.
+
 The source repository is `https://github.com/pfaisant/OpenWysiwyg`. You can transfer
 a tested build and a Git bundle over SSH if the origin cannot access GitHub. No
 GitHub or Cloudflare credentials belong in the checkout or published build.
