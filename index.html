@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f5" />
+    <meta name="description" content="A simple HTML and visual editor. Open source, saved in your browser." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>OpenWysiwyg</title>
+  </head>
+  <body data-mode="rendered" data-toolbar="off" data-theme="light">
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">OpenWysiwyg</div>
+        <nav class="view-switch" aria-label="Editor view">
+          <button type="button" data-view="rendered" aria-pressed="true" title="Rendered view (Ctrl / ⌘ + Shift + E)">Rendered</button>
+          <button type="button" data-view="html" aria-pressed="false" title="HTML view (Ctrl / ⌘ + Shift + E)">HTML</button>
+          <button type="button" data-view="split" id="split-button" aria-pressed="false" hidden>Split</button>
+        </nav>
+        <div class="header-actions">
+          <div id="file-actions" hidden>
+            <button type="button" data-action="new" title="New document">New</button>
+            <button type="button" data-action="open" title="Open an HTML or text file">Open</button>
+            <button type="button" data-action="copy" title="Copy HTML">Copy</button>
+            <button type="button" data-action="download" title="Download HTML">Download</button>
+          </div>
+          <button type="button" id="settings-button" aria-label="Settings" aria-haspopup="dialog" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9.5 3-.7 2.1-1.7 1L5 5.7l-2.5 4.4L4 11.8v2L2.5 15 5 19.3l2.1-.4 1.7 1 .7 2.1h5l.7-2.1 1.7-1 2.1.4 2.5-4.3-1.5-1.2v-2l1.5-1.7L19 5.7l-2.1.4-1.7-1L14.5 3z"/><circle cx="12" cy="12.5" r="3"/></svg>
+            <span>Settings</span>
+          </button>
+        </div>
+      </header>
+      <main id="workspace" class="workspace">
+        <section id="rendered-pane" class="editor-pane" aria-label="Rendered editor">
+          <div class="rendered-shell"><textarea id="rich-editor" aria-label="Document" placeholder="Start writing…"></textarea></div>
+        </section>
+        <section id="html-pane" class="editor-pane" aria-label="HTML editor" hidden><div id="code-editor"></div></section>
+      </main>
+      <footer id="status-bar" class="footer" hidden><span id="word-count">0 words</span><span id="save-state"></span></footer>
+    </div>
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-header"><h2 id="settings-title">Settings</h2><button type="button" id="close-settings" aria-label="Close settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <form class="settings-list" id="settings-form">
+        <label class="setting-row"><span class="setting-text"><strong>Formatting toolbar</strong><span>Headings, lists, links, images and tables.</span></span><input type="checkbox" role="switch" name="toolbar" /></label>
+        <label class="setting-row"><span class="setting-text"><strong>Split view</strong><span>Show rendered text and HTML together.</span></span><input type="checkbox" role="switch" name="split" /></label>
+        <label class="setting-row"><span class="setting-text"><strong>File actions</strong><span>New, open, copy and download.</span></span><input type="checkbox" role="switch" name="files" /></label>
+        <label class="setting-row"><span class="setting-text"><strong>Word count</strong><span>Show a small status bar.</span></span><input type="checkbox" role="switch" name="count" /></label>
+        <label class="setting-row"><span class="setting-text"><strong>Line numbers</strong><span>Add line numbers to the HTML editor.</span></span><input type="checkbox" role="switch" name="lines" /></label>
+        <label class="setting-row"><span class="setting-text"><strong>Remember document</strong><span>Keep your draft in this browser.</span></span><input type="checkbox" role="switch" name="remember" checked /></label>
+      </form>
+      <div class="settings-footer">
+        <p class="shortcut"><kbd id="shortcut-mod">Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>E</kbd><span>Switch view</span></p>
+        <div><a href="https://github.com/pfaisant/OpenWysiwyg" target="_blank" rel="noopener noreferrer">Source</a><a href="/licenses.html" target="_blank" rel="noopener noreferrer">Licenses</a><button type="button" id="reset-settings">Reset settings</button></div>
+      </div>
+    </dialog>
+    <dialog id="replace-dialog" class="settings-dialog" aria-labelledby="replace-title">
+      <div class="dialog-header"><h2 id="replace-title">Replace this document?</h2></div>
+      <p class="replace-description">Download a copy first if you want to keep it.</p>
+      <div class="dialog-actions"><button type="button" id="replace-download">Download copy</button><button type="button" id="replace-cancel">Cancel</button><button type="button" id="replace-confirm">Replace</button></div>
+    </dialog>
+    <input type="file" id="file-input" accept=".html,.htm,.txt,text/html,text/plain" hidden />
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <noscript>OpenWysiwyg needs JavaScript to edit documents.</noscript>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

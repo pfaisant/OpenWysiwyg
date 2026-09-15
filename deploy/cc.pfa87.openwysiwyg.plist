@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>cc.pfa87.openwysiwyg</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/clawdbot/Dev/OpenWysiwyg/scripts/serve.mjs</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/clawdbot/Dev/OpenWysiwyg</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOST</key><string>127.0.0.1</string>
+    <key>PORT</key><string>4321</string>
+    <key>STATIC_ROOT</key><string>/Users/clawdbot/Sites/openwysiwyg/current</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>/Users/clawdbot/Library/Logs/openwysiwyg.log</string>
+  <key>StandardErrorPath</key><string>/Users/clawdbot/Library/Logs/openwysiwyg.err.log</string>
+</dict>
+</plist>

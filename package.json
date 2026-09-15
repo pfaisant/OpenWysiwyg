@@ -1,0 +1,32 @@
+{
+  "name": "openwysiwyg",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A quiet HTML and visual editor.",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build && node scripts/source-archive.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "playwright test",
+    "check": "node --check src/main.js && node --check src/document.js && node --check scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.4",
+    "@codemirror/view": "^6.43.11",
+    "codemirror": "^6.0.2",
+    "dompurify": "^3.4.15",
+    "tinymce": "^8.9.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "vite": "^8.3.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "tinymce": {
+    "version": "8.9.1",
+    "repository": "https://github.com/tinymce/tinymce",
+    "commit": "f9dc8185c2d2f7c7d3759ecb569931cee7d530bb",
+    "url": "https://codeload.github.com/tinymce/tinymce/zip/f9dc8185c2d2f7c7d3759ecb569931cee7d530bb",
+    "filename": "tinymce-8.9.1-source.zip",
+    "sha256": "193a421bce515dde2359c44da0e623be2b40c6217018452f625e11b7d5639e9a"
+  },
+  "tinymce-dompurify": {
+    "version": "3.4.12",
+    "repository": "https://github.com/cure53/DOMPurify",
+    "commit": "a9ca1e537422319a557a9a2aa61f003b23b4a197",
+    "url": "https://codeload.github.com/cure53/DOMPurify/zip/a9ca1e537422319a557a9a2aa61f003b23b4a197",
+    "filename": "dompurify-3.4.12-source.zip",
+    "sha256": "67ff18d0aa9fdc89ce3c033f6d662020f696fa5e228492f8a2f06462cc08ea5f",
+    "note": "DOMPurify embedded in the installed tinymce.js; TinyMCE's notices.txt contains an older version number."
+  }
+}
