@@ -26,14 +26,14 @@ async function addTree(path, prefix) {
 }
 
 await stat(join(dist, 'index.html')); // Run only after Vite has finished.
-for (const name of ['package.json', 'package-lock.json', 'index.html', 'AGENTS.md', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md', '.gitignore']) {
+for (const name of ['package.json', 'package-lock.json', 'playwright.config.js', 'index.html', 'AGENTS.md', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md', '.gitignore', '.gitattributes']) {
   await addFile(join(root, name), name);
 }
 for (const name of ['vite.config.js', 'vite.config.mjs', 'vite.config.ts']) {
   try { await addFile(join(root, name), name); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
-for (const name of ['src', 'scripts', 'public']) await addTree(join(root, name), name);
+for (const name of ['src', 'scripts', 'public', 'tests']) await addTree(join(root, name), name);
 try { await addTree(join(root, 'deploy'), 'deploy'); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 
