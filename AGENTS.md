@@ -7,6 +7,9 @@
 - Never execute document scripts in the rendered editor. Keep sanitization and the
   isolated iframe's restrictive CSP and sandbox.
 - Drafts stay in this browser. Do not add document uploads or analytics.
+- Workbench integration is local-only: open `http://127.0.0.1:4321/`, keep the local
+  server on loopback, and never add personal-machine, tailnet, or public-site links
+  or fallbacks. Local deployment work does not authorize a public deployment.
 - All editing dependencies are self-hosted. Keep GPL source downloads and license
   notices with every build; update the exact upstream source manifest on upgrades.
 - Run `npm run check`, `npm run build`, and `npm test` for editor changes. Check the

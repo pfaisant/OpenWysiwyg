@@ -30,17 +30,14 @@ do not change the running release.
 `deploy\watch-local.ps1` hidden at Windows login. The supervisor restarts its Node
 server after a failure. A named mutex prevents duplicate supervisors. Logs and the
 current process IDs are under `%LOCALAPPDATA%\OpenWysiwyg`. The supervisor binds
-separate listeners to localhost and, when connected, the PC's Tailscale IPv4 read
-from `tailscale ip -4`. It never binds to all interfaces or the LAN address.
-Unavailable Tailscale leaves localhost running. The supervisor rechecks the assigned
-Tailscale address every 30 seconds and restarts its own server when that address changes.
+only to `127.0.0.1`. It does not discover or bind to Tailscale or LAN addresses.
 Installation does not add a firewall rule or public network listener.
 
-Workbench's **Tools → OpenWysiwyg** opens this local editor when Workbench itself
-is opened at localhost. Remote Workbench sessions open the same Windows deployment
-at `http://100.96.64.112:4321/` over the private tailnet. A matching Windows tray
+Workbench's **Tools → OpenWysiwyg** always opens `http://127.0.0.1:4321/` on the
+device running the browser. It has no public-site link or remote-machine fallback.
+The editor must be installed locally on that device. A matching Windows tray
 command is prepared in Workbench's source; installing the updated tray executable
-is still pending. Localhost, tailnet and public origins have separate saved drafts.
+is still pending. Drafts stay in the local browser.
 The Workbench catalogue is `C:\Users\paul.faisant\workbench\tools.json`.
 
 Republish with the same install command. To stop the local server and remove its
