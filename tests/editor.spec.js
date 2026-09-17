@@ -33,6 +33,32 @@ async function setOptions(page, names) {
   await page.getByRole('button', { name: 'Close settings', exact: true }).click();
 }
 
+async function setSplitOrder(page, order) {
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('select[name="splitOrder"]').selectOption(order);
+  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+}
+
+async function expectSplitOrder(page, order, stacked = false) {
+  const ids = order === 'html-first' ? ['html-pane', 'rendered-pane'] : ['rendered-pane', 'html-pane'];
+  expect(await page.locator('#workspace > .editor-pane').evaluateAll(panes => panes.map(pane => pane.id))).toEqual(ids);
+  await expect(page.locator(`#${ids[0]}`)).toBeVisible();
+  await expect(page.locator(`#${ids[1]}`)).toBeVisible();
+  const first = await page.locator(`#${ids[0]}`).boundingBox();
+  const second = await page.locator(`#${ids[1]}`).boundingBox();
+  expect(first.width).toBeGreaterThan(0);
+  expect(first.height).toBeGreaterThan(0);
+  expect(second.width).toBeGreaterThan(0);
+  expect(second.height).toBeGreaterThan(0);
+  if (stacked) {
+    expect(first.y + first.height).toBeLessThanOrEqual(second.y + 1);
+    expect(Math.abs(first.x - second.x)).toBeLessThanOrEqual(1);
+  } else {
+    expect(first.x + first.width).toBeLessThanOrEqual(second.x + 1);
+    expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(1);
+  }
+}
+
 async function appendVisual(page, text) {
   await visualBody(page).click();
   await visualBody(page).press('ControlOrMeta+End');
@@ -146,6 +172,109 @@ test('split view synchronizes edits in both directions', async ({ page }) => {
   await appendVisual(page, ' and rendered');
   await expect.poll(() => sourceText(page)).toContain('Updated from HTML and rendered');
 });
+
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`split order changes both pane positions and document order at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await openEditor(page);
+    await setOptions(page, ['split']);
+    await writeSource(page, '<p>Both panes stay usable.</p>');
+    await view(page, 'Split');
+    await expectSplitOrder(page, 'rendered-first', viewport.width < 640);
+    await setSplitOrder(page, 'html-first');
+    await expectSplitOrder(page, 'html-first', viewport.width < 640);
+    await expect(visualBody(page)).toHaveText('Both panes stay usable.');
+    await noHorizontalOverflow(page);
+    const splitImage = testInfo.outputPath(`html-first-${viewport.width}x${viewport.height}.png`);
+    await page.screenshot({ path: splitImage });
+    await testInfo.attach('HTML first split layout', { path: splitImage, contentType: 'image/png' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await noHorizontalOverflow(page);
+    const settingsImage = testInfo.outputPath(`split-order-settings-${viewport.width}x${viewport.height}.png`);
+    await page.screenshot({ path: settingsImage });
+    await testInfo.attach('Split order setting', { path: settingsImage, contentType: 'image/png' });
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await setSplitOrder(page, 'rendered-first');
+    await expectSplitOrder(page, 'rendered-first', viewport.width < 640);
+    await noHorizontalOverflow(page);
+  });
+}
+
+test('split order is conditional, persists across reload, and resets to rendered first', async ({ page }) => {
+  await openEditor(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.locator('#split-order-setting')).toBeHidden();
+  await page.locator('input[name="split"]').check();
+  await expect(page.locator('#split-order-setting')).toBeVisible();
+  const order = page.getByRole('combobox', { name: 'Split order' });
+  await expect(order).toHaveValue('rendered-first');
+  await expect(order.locator('option')).toHaveText(['Rendered left / HTML right', 'HTML left / Rendered right']);
+  await order.selectOption('html-first');
+  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await view(page, 'Split');
+  await expectSplitOrder(page, 'html-first');
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+  await view(page, 'Split');
+  await expectSplitOrder(page, 'html-first');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(order).toHaveValue('html-first');
+  await page.getByRole('button', { name: 'Reset settings', exact: true }).click();
+  await expect(page.locator('input[name="split"]')).not.toBeChecked();
+  await expect(page.locator('#split-order-setting')).toBeHidden();
+  await expect(page.locator('select[name="splitOrder"]')).toHaveValue('rendered-first');
+  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+  await setOptions(page, ['split']);
+  await view(page, 'Split');
+  await expectSplitOrder(page, 'rendered-first');
+});
+
+test('reordering split panes preserves exact HTML and both editors still synchronize', async ({ page }) => {
+  await openEditor(page);
+  await setOptions(page, ['split']);
+  const raw = '<!DOCTYPE html>\n<html lang="en">\n<head><title>Preserve this</title></head>\n<body class="paper">\n  <!-- Keep spacing and entities -->\n  <p data-note="A &amp; B">Original &nbsp; draft.</p>\n</body>\n</html>\n';
+  await writeSource(page, raw);
+  await view(page, 'Split');
+  for (const order of ['html-first', 'rendered-first', 'html-first']) {
+    await setSplitOrder(page, order);
+    expect(await sourceText(page)).toBe(raw);
+  }
+  await writeSource(page, raw.replace('Original &nbsp; draft.', 'Edited from HTML.'));
+  await expect(rendered(page).locator('p')).toHaveText('Edited from HTML.');
+  await appendVisual(page, ' Then edited visually.');
+  await expect.poll(() => sourceText(page)).toContain('Edited from HTML. Then edited visually.');
+  const edited = await sourceText(page);
+  expect(edited).toContain('<head><title>Preserve this</title></head>');
+  await setSplitOrder(page, 'rendered-first');
+  expect(await sourceText(page)).toBe(edited);
+  await expect(rendered(page).locator('p')).toHaveText('Edited from HTML. Then edited visually.');
+});
+
+for (const scenario of [
+  { name: 'legacy boolean settings', order: undefined },
+  { name: 'an invalid stored split order', order: 'sideways' },
+]) {
+  test(`${scenario.name} restores boolean options and uses rendered-first order`, async ({ page }) => {
+    await page.addInitScript(order => {
+      const settings = { toolbar: true, split: true, files: true, count: false, lines: true, remember: false };
+      if (order !== undefined) settings.splitOrder = order;
+      localStorage.setItem('openwysiwyg.settings', JSON.stringify(settings));
+    }, scenario.order);
+    await openEditor(page);
+    await expect(page.locator('.tox-editor-header')).toBeVisible();
+    await expect(page.locator('#file-actions')).toBeVisible();
+    await expect(page.locator('#status-bar')).toBeHidden();
+    await view(page, 'Split');
+    await expectSplitOrder(page, 'rendered-first');
+    await expect(page.locator('.cm-lineNumbers')).toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.locator('select[name="splitOrder"]')).toHaveValue('rendered-first');
+    for (const name of ['toolbar', 'split', 'files', 'lines']) await expect(page.locator(`input[name="${name}"]`)).toBeChecked();
+    for (const name of ['count', 'remember']) await expect(page.locator(`input[name="${name}"]`)).not.toBeChecked();
+  });
+}
 
 test('a rapid move from HTML to rendered in split view cannot overwrite fresh source', async ({ page }) => {
   await openEditor(page);

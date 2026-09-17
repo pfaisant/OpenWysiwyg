@@ -10,7 +10,45 @@ npm run build
 node scripts/serve.mjs
 ```
 
-Open `http://127.0.0.1:4321`. `HOST`, `PORT`, and `STATIC_ROOT` override the bind address, port, and published directory. Only GET and HEAD are accepted. No files outside the published directory are served, including symlinks pointing outside it.
+Open `http://127.0.0.1:4321`. `HOST`, `PORT`, and `STATIC_ROOT` override the bind address, port, and published directory. `HOSTS` can specify a comma-separated list of exact bind addresses and takes precedence over `HOST`. Only GET and HEAD are accepted. No files outside the published directory are served, including symlinks pointing outside it.
+
+## Windows local deployment and Workbench
+
+The Windows checkout is `D:\OpenWysiwyg`. Publish and start a persistent local copy:
+
+```powershell
+pwsh -NoProfile -File D:\OpenWysiwyg\deploy\install-local.ps1
+```
+
+Use `-SkipBuild` only after a successful build. The installer copies `dist` into a new
+`%LOCALAPPDATA%\OpenWysiwyg\releases\<timestamp>` directory, retains old releases,
+and starts the server at **http://127.0.0.1:4321/**. The current release is recorded
+in `deployment.json` alongside that directory. Edits and test builds in the checkout
+do not change the running release.
+
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\OpenWysiwyg` launches
+`deploy\watch-local.ps1` hidden at Windows login. The supervisor restarts its Node
+server after a failure. A named mutex prevents duplicate supervisors. Logs and the
+current process IDs are under `%LOCALAPPDATA%\OpenWysiwyg`. The supervisor binds
+separate listeners to localhost and, when connected, the PC's Tailscale IPv4 read
+from `tailscale ip -4`. It never binds to all interfaces or the LAN address.
+Unavailable Tailscale leaves localhost running. The supervisor rechecks the assigned
+Tailscale address every 30 seconds and restarts its own server when that address changes.
+Installation does not add a firewall rule or public network listener.
+
+Workbench's **Tools → OpenWysiwyg** opens this local editor when Workbench itself
+is opened at localhost. Remote Workbench sessions open the same Windows deployment
+at `http://100.96.64.112:4321/` over the private tailnet. A matching Windows tray
+command is prepared in Workbench's source; installing the updated tray executable
+is still pending. Localhost, tailnet and public origins have separate saved drafts.
+The Workbench catalogue is `C:\Users\paul.faisant\workbench\tools.json`.
+
+Republish with the same install command. To stop the local server and remove its
+login startup entry, retaining the checkout, releases and browser drafts:
+
+```powershell
+pwsh -NoProfile -File D:\OpenWysiwyg\deploy\install-local.ps1 -Uninstall
+```
 
 ## Mac mini
 

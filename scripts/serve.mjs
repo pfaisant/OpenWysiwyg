@@ -128,11 +128,20 @@ export async function createStaticServer({ root = resolve(projectRoot, 'dist') }
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const host = process.env.HOST || '127.0.0.1';
+  const hosts = [...new Set((process.env.HOSTS || process.env.HOST || '127.0.0.1').split(',').map(host => host.trim()).filter(Boolean))];
+  if (!hosts.length) throw new Error('HOSTS must contain at least one bind address');
   const port = Number(process.env.PORT || 4321);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535');
-  const server = await createStaticServer({ root: process.env.STATIC_ROOT || resolve(projectRoot, 'dist') });
-  server.listen(port, host, () => console.log(`OpenWysiwyg: http://${host}:${port}`));
-  server.on('error', (error) => { console.error(error.message); process.exitCode = 1; });
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit()));
+  const servers = [];
+  const close = async (code = 0) => {
+    await Promise.all(servers.map(server => new Promise(done => server.close(done))));
+    process.exit(code);
+  };
+  for (const host of hosts) {
+    const server = await createStaticServer({ root: process.env.STATIC_ROOT || resolve(projectRoot, 'dist') });
+    servers.push(server);
+    server.on('error', (error) => { console.error(error.message); void close(1); });
+    server.listen(port, host, () => console.log(`OpenWysiwyg: http://${host.includes(':') ? `[${host}]` : host}:${port}`));
+  }
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { void close(); });
 }

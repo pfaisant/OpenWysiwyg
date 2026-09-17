@@ -39,11 +39,15 @@ export function escapeText(text) {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-export const DEFAULT_SETTINGS = Object.freeze({ toolbar: false, split: false, files: false, count: false, lines: false, remember: true });
+export const DEFAULT_SETTINGS = Object.freeze({ toolbar: false, split: false, splitOrder: 'rendered-first', files: false, count: false, lines: false, remember: true });
 
 export function readSettings(storage) {
   try {
     const parsed = JSON.parse(storage.getItem('openwysiwyg.settings') || '{}');
-    return Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([key, value]) => [key, typeof parsed?.[key] === 'boolean' ? parsed[key] : value]));
+    return Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([key, value]) => [key,
+      key === 'splitOrder'
+        ? (parsed?.[key] === 'html-first' ? 'html-first' : value)
+        : (typeof parsed?.[key] === 'boolean' ? parsed[key] : value),
+    ]));
   } catch { return { ...DEFAULT_SETTINGS }; }
 }

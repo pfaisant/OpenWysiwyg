@@ -5,6 +5,9 @@ A local HTML editor at [wysiwyg.pfa87.cc](https://wysiwyg.pfa87.cc).
 Start with a blank page. Switch between **Rendered** and **HTML**, or press
 **Ctrl/Cmd + Shift + E**. Settings holds everything else: formatting tools, split
 view, file actions, word count and line numbers. Enable them when needed.
+When split view is enabled, **Settings → Split order** chooses which editor goes
+on the left. On a small screen, the left editor appears on top. The choice is
+remembered in this browser.
 
 Your draft and settings stay in this browser's local storage. There is no account,
 document server, advertising or AI integration. Download HTML to keep a separate

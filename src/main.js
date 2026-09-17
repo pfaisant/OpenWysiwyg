@@ -153,7 +153,7 @@ function setMode(next, focus = true) {
   document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === mode)));
   requestAnimationFrame(() => {
     code.requestMeasure();
-    if (focus) { if (mode === 'html') code.focus(); else rich?.focus(); }
+    if (focus) { if (mode === 'html' || (mode === 'split' && settings.splitOrder === 'html-first')) code.focus(); else rich?.focus(); }
   });
 }
 
@@ -171,11 +171,22 @@ function shortcut(event) {
 function applySettings() {
   document.body.dataset.toolbar = settings.toolbar ? 'on' : 'off';
   $('#split-button').hidden = !settings.split;
+  $('#split-order-setting').hidden = !settings.split;
+  const workspace = $('#workspace');
+  const htmlPane = $('#html-pane');
+  // Move only the HTML pane. Reparenting the rendered iframe would reload it
+  // and destroy its document, selection and undo history.
+  if (settings.splitOrder === 'html-first' && workspace.firstElementChild !== htmlPane) workspace.prepend(htmlPane);
+  else if (settings.splitOrder === 'rendered-first' && workspace.lastElementChild !== htmlPane) workspace.append(htmlPane);
   $('#file-actions').hidden = !settings.files;
   $('#status-bar').hidden = !settings.count;
   numberGutter && code.dispatch({ effects: numberGutter.reconfigure(settings.lines ? lineNumbers() : []) });
   if (mode === 'split' && !settings.split) setMode('rendered', false);
-  for (const [key, value] of Object.entries(settings)) $(`[name="${key}"]`).checked = value;
+  for (const [key, value] of Object.entries(settings)) {
+    const input = $(`[name="${key}"]`);
+    if (input.type === 'checkbox') input.checked = value;
+    else input.value = value;
+  }
   updateStatus();
   requestAnimationFrame(() => code.requestMeasure());
 }
@@ -184,7 +195,9 @@ $('#settings-form').addEventListener('submit', event => event.preventDefault());
 $('#settings-form').addEventListener('change', event => {
   const key = event.target.name;
   if (!(key in DEFAULT_SETTINGS)) return;
-  settings[key] = event.target.checked;
+  settings[key] = key === 'splitOrder'
+    ? (event.target.value === 'html-first' ? 'html-first' : 'rendered-first')
+    : event.target.checked;
   applySettings();
   try {
     localStorage.setItem('openwysiwyg.settings', JSON.stringify(settings));
