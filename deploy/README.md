@@ -39,9 +39,9 @@ browser, and Workbench must also be opened at localhost. The local supervisor en
 `WORKBENCH_EMBED=1`: only the embed entry page permits framing, and only by
 `http://127.0.0.1:4747`, `http://localhost:4747` or `http://[::1]:4747`.
 Other pages keep framing disabled. There is no remote-machine fallback.
-Drafts use the same browser storage as the standalone local editor. A matching Windows tray
-command is prepared in Workbench's source; installing the updated tray executable
-is still pending.
+Drafts use the same browser storage as the standalone local editor. The Windows tray
+offers **Open editor in Workbench** and **Copy Markdown as HTML code**. The latter
+copies actual HTML markup as plain text and also supplies the rich HTML clipboard format.
 The Workbench catalogue is `C:\Users\paul.faisant\workbench\tools.json`.
 
 Republish with the same install command. To stop the local server and remove its

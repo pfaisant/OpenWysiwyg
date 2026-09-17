@@ -8,6 +8,8 @@ copyrights and licenses. No premium TinyMCE plugins or cloud services are includ
 | --- | --- | --- |
 | TinyMCE 8.9.1 | GPL-2.0-or-later (the selected distribution option) | [Source](https://github.com/tinymce/tinymce/tree/f9dc8185c2d2f7c7d3759ecb569931cee7d530bb) · [License](https://github.com/tinymce/tinymce/blob/f9dc8185c2d2f7c7d3759ecb569931cee7d530bb/LICENSE.md) |
 | CodeMirror 6, Lezer and supporting runtime packages | MIT | [CodeMirror](https://github.com/codemirror) · [Lezer](https://github.com/lezer-parser) |
+| Marked | MIT | [Source](https://github.com/markedjs/marked) |
+| Turndown and turndown-plugin-gfm | MIT | [Turndown](https://github.com/mixmark-io/turndown) · [GFM plugin](https://github.com/mixmark-io/turndown-plugin-gfm) |
 | DOMPurify 3.4.15 | MPL-2.0 or Apache-2.0; used here under MPL-2.0 | [Source](https://github.com/cure53/DOMPurify/tree/3.4.15) · [MPL license](https://github.com/cure53/DOMPurify/blob/3.4.15/LICENSE-MPL) |
 | DOMPurify 3.4.12, embedded in TinyMCE | MPL-2.0 or Apache-2.0; used here under MPL-2.0 | [Source](https://github.com/cure53/DOMPurify/tree/a9ca1e537422319a557a9a2aa61f003b23b4a197) |
 

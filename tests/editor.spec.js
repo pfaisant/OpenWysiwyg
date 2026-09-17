@@ -17,14 +17,37 @@ async function openEditor(page) {
 }
 
 async function view(page, name) {
-  await page.getByRole('button', { name, exact: true }).click();
-  await expect(page.locator('body')).toHaveAttribute('data-mode', name === 'HTML' ? 'html' : name.toLowerCase());
+  const mode = name === 'HTML' ? 'html' : name.toLowerCase();
+  await page.locator('[data-view=' + mode + ']').click();
+  await expect(page.locator('body')).toHaveAttribute('data-mode', mode);
 }
 
 async function writeSource(page, text) {
-  if (await page.locator('body').getAttribute('data-mode') === 'rendered') await view(page, 'HTML');
+  if (!['html', 'split'].includes(await page.locator('body').getAttribute('data-mode'))) await view(page, 'HTML');
   await htmlEditor(page).fill(text);
   await expect.poll(() => sourceText(page)).toBe(text);
+}
+
+async function fileAction(page, name) {
+  if (!await page.locator('#document-menu').isVisible()) await page.locator('#documents-button').click();
+  await page.locator('#document-menu').getByRole('button', { name, exact: true }).click();
+}
+
+async function chooseFormat(page, format) {
+  await page.locator('#format-button').click();
+  await page.locator('#format-select').selectOption(format);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#format-dialog')).not.toBeVisible();
+}
+
+async function pasteIntoVisual(page, plain, html) {
+  await visualBody(page).click();
+  await visualBody(page).evaluate((body, data) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', data.plain);
+    clipboardData.setData('text/html', data.html);
+    body.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  }, { plain, html });
 }
 
 async function setOptions(page, names) {
@@ -41,7 +64,7 @@ async function setSplitOrder(page, order) {
 
 async function expectSplitOrder(page, order, stacked = false) {
   const ids = order === 'html-first' ? ['html-pane', 'rendered-pane'] : ['rendered-pane', 'html-pane'];
-  expect(await page.locator('#workspace > .editor-pane').evaluateAll(panes => panes.map(pane => pane.id))).toEqual(ids);
+  expect(await page.locator('#workspace > #html-pane, #workspace > #rendered-pane').evaluateAll(panes => panes.map(pane => pane.id))).toEqual(ids);
   await expect(page.locator(`#${ids[0]}`)).toBeVisible();
   await expect(page.locator(`#${ids[1]}`)).toBeVisible();
   const first = await page.locator(`#${ids[0]}`).boundingBox();
@@ -208,7 +231,7 @@ test('split order is conditional, persists across reload, and resets to rendered
   await expect(page.locator('#split-order-setting')).toBeVisible();
   const order = page.getByRole('combobox', { name: 'Split order' });
   await expect(order).toHaveValue('rendered-first');
-  await expect(order.locator('option')).toHaveText(['Rendered left / HTML right', 'HTML left / Rendered right']);
+  await expect(order.locator('option')).toHaveText([/Rendered left \/ (?:HTML|Source) right/, /(?:HTML|Source) left \/ Rendered right/]);
   await order.selectOption('html-first');
   await page.getByRole('button', { name: 'Close settings', exact: true }).click();
   await view(page, 'Split');
@@ -404,7 +427,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.goto('/?embed=workbench');
     await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
     const header = await page.locator('.app-header').boundingBox();
-    expect(header.height).toBeLessThanOrEqual(52);
+    expect(header.height).toBeLessThanOrEqual(viewport.width < 640 ? 96 : 52);
     const headerColor = await page.locator('.app-header').evaluate(node => getComputedStyle(node).backgroundColor.match(/\d+/g).slice(0, 3).map(Number));
     expect(Math.max(...headerColor)).toBeLessThan(80);
     await noHorizontalOverflow(page);
@@ -454,7 +477,7 @@ test('Workbench receives readiness from the embedded local editor without a new 
   const editor = page.frameLocator('#editor');
   await expect(editor.locator('body')).toHaveAttribute('data-ready', 'true');
   await expect.poll(() => page.evaluate(() => window.editorMessages.some(message => message.type === 'openwysiwyg:ready'))).toBe(true);
-  await editor.getByRole('button', { name: 'HTML', exact: true }).click();
+  await editor.locator('[data-view=html]').click();
   await editor.locator('.cm-content').fill('<p>Edited inside Workbench.</p>');
   await editor.getByRole('button', { name: 'Rendered', exact: true }).click();
   await expect(editor.frameLocator('iframe[title="Rendered document"]').locator('p')).toHaveText('Edited inside Workbench.');
@@ -468,17 +491,17 @@ test('opening HTML, downloading, and cancelling New preserve the document', asyn
   const raw = '<!doctype html>\n<title>Imported</title><body><p>From a file &amp; unchanged.</p></body>';
   await page.locator('#file-input').setInputFiles({ name: 'letter.html', mimeType: 'text/html', buffer: Buffer.from(raw) });
   await expect(visualBody(page)).toHaveText('From a file & unchanged.');
-  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await fileAction(page, 'New');
   await expect(page.getByRole('dialog', { name: 'Replace this document?' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await view(page, 'HTML');
   expect(await sourceText(page)).toBe(raw);
   const downloading = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await fileAction(page, 'Download');
   const download = await downloading;
   expect(download.suggestedFilename()).toBe('letter.html');
   expect(await readFile(await download.path(), 'utf8')).toBe(raw);
-  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await fileAction(page, 'New');
   await page.getByRole('button', { name: 'Replace', exact: true }).click();
   await expect.poll(() => sourceText(page)).toBe('');
 });
@@ -516,5 +539,233 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(page.locator('#html-pane')).toBeVisible();
     await expect(page.locator('#rendered-pane')).toBeVisible();
     await noHorizontalOverflow(page);
+  });
+}
+
+const markdownExample = '# Morphing menu\n\nA **compact** menu with [documentation](https://example.org/docs).\n\n| Project | Stack |\n| --- | --- |\n| Bloom | React |\n\n```bash\nnpm install bloom-menu\n```\n\n## Next steps\n\n- Try the demo\n- Read the source\n';
+
+test('Markdown is detected and rendered, while switching preserves its exact source', async ({ page }) => {
+  await openEditor(page);
+  await writeSource(page, markdownExample);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await expect(page.locator('[data-view=html]')).toHaveText('Markdown');
+  await expect(page.locator('[data-view=export]')).toHaveText('HTML');
+  for (let iteration = 0; iteration < 2; iteration++) {
+    await view(page, 'Rendered');
+    await expect(rendered(page).locator('h1')).toHaveText('Morphing menu');
+    await expect(rendered(page).locator('strong')).toHaveText('compact');
+    await expect(rendered(page).getByRole('link', { name: 'documentation' })).toHaveAttribute('href', 'https://example.org/docs');
+    await expect(rendered(page).locator('table th')).toHaveText(['Project', 'Stack']);
+    await expect(rendered(page).locator('table td')).toHaveText(['Bloom', 'React']);
+    await expect(rendered(page).locator('pre code')).toHaveText('npm install bloom-menu\n');
+    await expect(rendered(page).locator('ul li')).toHaveText(['Try the demo', 'Read the source']);
+    await view(page, 'HTML');
+    expect(await sourceText(page)).toBe(markdownExample);
+    await view(page, 'Export');
+    await expect(page.locator('#generated-code')).toContainText('<h1>Morphing menu</h1>');
+    await expect(page.locator('#generated-code')).toContainText('<table>');
+    await expect(page.locator('#generated-code')).not.toContainText('**compact**');
+    expect(await page.locator('#generated-code').evaluate(element => element.isContentEditable)).toBe(false);
+    await view(page, 'HTML');
+    expect(await sourceText(page)).toBe(markdownExample);
+  }
+});
+
+test('format detection distinguishes HTML, Markdown and text, with a non-destructive override', async ({ page }) => {
+  await openEditor(page);
+  await writeSource(page, '<h2>HTML document</h2>');
+  await expect(page.locator('#format-button')).toHaveText('Detected: HTML');
+  await expect(page.locator('[data-view=export]')).toBeHidden();
+  const text = 'A normal sentence with 2 < 3 and 5 > 4.';
+  await writeSource(page, text);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Plain text');
+  await view(page, 'Rendered');
+  await expect(visualBody(page)).toHaveText(text);
+  const markdown = '## Interpret this heading\n\n**Emphasis stays in source.**';
+  await writeSource(page, markdown);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await chooseFormat(page, 'text');
+  await view(page, 'Rendered');
+  await expect(visualBody(page)).toContainText('## Interpret this heading');
+  await expect(rendered(page).locator('h2, strong')).toHaveCount(0);
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+  await chooseFormat(page, 'auto');
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await view(page, 'Rendered');
+  await expect(rendered(page).locator('h2')).toHaveText('Interpret this heading');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+});
+
+test('visual edits to a Markdown draft update Markdown and survive reload', async ({ page }) => {
+  await openEditor(page);
+  await writeSource(page, '# A Markdown draft\n\nOriginal paragraph.');
+  await view(page, 'Rendered');
+  await appendVisual(page, ' Edited visually.');
+  await view(page, 'HTML');
+  const edited = await sourceText(page);
+  expect(edited).toContain('# A Markdown draft');
+  expect(edited).toContain('Original paragraph. Edited visually.');
+  expect(edited).not.toMatch(/<h1|<p>/);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await expect(rendered(page).locator('h1')).toHaveText('A Markdown draft');
+  await expect(rendered(page).locator('p')).toHaveText('Original paragraph. Edited visually.');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(edited);
+});
+
+test('Markdown task states and fenced HTML survive a visual edit as Markdown', async ({ page }) => {
+  await openEditor(page);
+  const markdown = '# Checklist\n\n- [x] Finished task\n- [ ] Remaining task\n\n```html\n<p>literal HTML</p>\n```\n\nClosing paragraph.';
+  await writeSource(page, markdown);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await view(page, 'Rendered');
+  await expect(rendered(page).locator('li')).toHaveText(['☑ Finished task', '☐ Remaining task']);
+  await expect(rendered(page).locator('pre code')).toHaveText('<p>literal HTML</p>\n');
+  await expect(rendered(page).locator('pre p')).toHaveCount(0);
+  await appendVisual(page, ' Edited visually.');
+  await view(page, 'HTML');
+  const edited = await sourceText(page);
+  expect(edited).toMatch(/- +\[x\] Finished task/);
+  expect(edited).toMatch(/- +\[ \] Remaining task/);
+  expect(edited).toContain('```html\n<p>literal HTML</p>\n```');
+  expect(edited).toContain('Closing paragraph. Edited visually.');
+  await view(page, 'Rendered');
+  await expect(rendered(page).locator('li')).toHaveText(['☑ Finished task', '☐ Remaining task']);
+  await expect(rendered(page).locator('pre code')).toHaveText('<p>literal HTML</p>\n');
+});
+
+test('pasting Markdown into the rendered editor ignores unrelated clipboard page HTML', async ({ page }) => {
+  await openEditor(page);
+  const markdown = '# Pasted answer\n\nThe **actual content**.\n\n- First\n- Second';
+  await pasteIntoVisual(page, markdown, '<html><body><nav>Skip to content New chat Search Recents Library</nav><main>Unrelated page chrome</main></body></html>');
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await expect(rendered(page).locator('h1')).toHaveText('Pasted answer');
+  await expect(rendered(page).locator('strong')).toHaveText('actual content');
+  await expect(visualBody(page)).not.toContainText('Skip to content');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+});
+
+test('pasting into the source editor preserves plain Markdown instead of rich clipboard markup', async ({ page }) => {
+  await openEditor(page);
+  await view(page, 'HTML');
+  const markdown = '# Source paste\n\nA **Markdown** document.';
+  await htmlEditor(page).focus();
+  await htmlEditor(page).evaluate((editor, plain) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', plain);
+    clipboardData.setData('text/html', '<nav>New chat Library Recents</nav>');
+    editor.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  }, markdown);
+  await expect.poll(() => sourceText(page)).toBe(markdown);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await view(page, 'Rendered');
+  await expect(rendered(page).locator('h1')).toHaveText('Source paste');
+});
+
+test('Copy HTML code puts generated markup on the plain-text clipboard', async ({ page }) => {
+  await openEditor(page);
+  await setOptions(page, ['files']);
+  await writeSource(page, '# Clipboard heading\n\nA **bold** paragraph.');
+  await page.evaluate(() => {
+    window.copiedHtml = null;
+    Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async text => { window.copiedHtml = text; } });
+  });
+  await fileAction(page, 'Copy HTML code');
+  await expect.poll(() => page.evaluate(() => window.copiedHtml)).toContain('<h1>Clipboard heading</h1>');
+  const copied = await page.evaluate(() => window.copiedHtml);
+  expect(copied).toContain('<strong>bold</strong>');
+  expect(copied).not.toContain('# Clipboard heading');
+  expect(copied).not.toContain('**bold**');
+  expect(await sourceText(page)).toBe('# Clipboard heading\n\nA **bold** paragraph.');
+});
+
+test('Markdown files retain source and extension, and HTML download contains converted markup', async ({ page }) => {
+  await openEditor(page);
+  await setOptions(page, ['files']);
+  const markdown = '# Imported Markdown\n\nKeep **this** source exactly.\n';
+  await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
+  await expect(page.locator('#format-button')).toContainText('Markdown');
+  await expect(rendered(page).locator('h1')).toHaveText('Imported Markdown');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+  let downloading = page.waitForEvent('download');
+  await fileAction(page, 'Download');
+  const sourceDownload = await downloading;
+  expect(sourceDownload.suggestedFilename()).toBe('notes.md');
+  expect(await readFile(await sourceDownload.path(), 'utf8')).toBe(markdown);
+  downloading = page.waitForEvent('download');
+  await fileAction(page, 'Download HTML');
+  const htmlDownload = await downloading;
+  expect(htmlDownload.suggestedFilename()).toBe('notes.html');
+  const html = await readFile(await htmlDownload.path(), 'utf8');
+  expect(html).toContain('<h1>Imported Markdown</h1>');
+  expect(html).toContain('<strong>this</strong>');
+  expect(html).not.toContain('# Imported Markdown');
+});
+
+test('a legacy draft containing Markdown is detected without losing the saved source', async ({ page }) => {
+  const markdown = '# Existing draft\n\nSaved before Markdown support.\n';
+  await page.addInitScript(source => {
+    localStorage.setItem('openwysiwyg.document', JSON.stringify({ html: source, name: 'document.html' }));
+  }, markdown);
+  await openEditor(page);
+  await expect(page.locator('#format-button')).toHaveText('Detected: Markdown');
+  await expect(rendered(page).locator('h1')).toHaveText('Existing draft');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+});
+
+test('Markdown rendering strips executable HTML and unsafe links while retaining source', async ({ page }) => {
+  await openEditor(page);
+  const markdown = '# Safe heading\n\n[Unsafe link](javascript:alert(1))\n\n<img src="/missing" onerror="window.top.markdownInjected=true">\n\n<script>window.top.markdownInjected=true</script>\n\n**Safe text**';
+  await writeSource(page, markdown);
+  await chooseFormat(page, 'markdown');
+  await view(page, 'Rendered');
+  await expect(rendered(page).locator('h1')).toHaveText('Safe heading');
+  await expect(rendered(page).locator('strong')).toHaveText('Safe text');
+  await expect(rendered(page).locator('script, [onerror], [onclick]')).toHaveCount(0);
+  expect(await rendered(page).locator('a').getAttribute('href') || '').not.toMatch(/^javascript:/i);
+  expect(await page.evaluate(() => window.markdownInjected)).toBeUndefined();
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(markdown);
+});
+
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`Markdown controls, Documents and format settings fit at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/?embed=workbench');
+    await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+    await writeSource(page, markdownExample);
+    await setOptions(page, ['files', 'split']);
+    await noHorizontalOverflow(page);
+    await view(page, 'Rendered');
+    await expect(page.locator('#format-button')).toBeVisible();
+    await expect(page.locator('#settings-button')).toBeVisible();
+    await page.locator('#documents-button').click();
+    await expect(page.locator('#document-menu')).toBeVisible();
+    await expect(page.locator('#document-menu').getByRole('button', { name: 'Copy HTML code', exact: true })).toBeVisible();
+    await noHorizontalOverflow(page);
+    const menu = await page.locator('#document-menu').boundingBox();
+    expect(menu.x).toBeGreaterThanOrEqual(0);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menu.y + menu.height).toBeLessThanOrEqual(viewport.height + 1);
+    await page.screenshot({ path: testInfo.outputPath(`markdown-documents-${viewport.width}x${viewport.height}.png`) });
+    await page.keyboard.press('Escape');
+    await page.locator('#format-button').click();
+    await expect(page.locator('#format-dialog')).toBeVisible();
+    await noHorizontalOverflow(page);
+    await page.keyboard.press('Escape');
+    await view(page, 'Split');
+    await noHorizontalOverflow(page);
+    await expectSplitOrder(page, 'rendered-first', viewport.width < 640);
+    const docWidth = await visualBody(page).evaluate(body => ({ scroll: body.ownerDocument.documentElement.scrollWidth, width: body.ownerDocument.documentElement.clientWidth }));
+    expect(docWidth.scroll).toBeLessThanOrEqual(docWidth.width + 1);
+    await page.screenshot({ path: testInfo.outputPath(`markdown-split-${viewport.width}x${viewport.height}.png`) });
   });
 }

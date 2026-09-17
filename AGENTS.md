@@ -1,9 +1,12 @@
 # OpenWysiwyg
 
-- Keep the default interface to the name, Rendered / HTML switch, and Settings.
+- Keep the default interface to the name, detected format, view switch, and Settings.
 - New controls and features belong behind opt-in settings. Do not add onboarding,
   subtitles, sample documents, advertisements, AI features, or promotional copy.
-- Keep raw HTML as the source of truth. Merely switching views must not rewrite it.
+- Keep raw HTML, Markdown or plain text as the source of truth. Merely switching
+  views must not rewrite it. Generated HTML is a separate read-only view.
+- Copy HTML code writes actual markup as plain text. Copy formatted text is a
+  separate action. Preserve the format and extension of downloaded source files.
 - Never execute document scripts in the rendered editor. Keep sanitization and the
   isolated iframe's restrictive CSP and sandbox.
 - Drafts stay in this browser. Do not add document uploads or analytics.

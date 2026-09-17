@@ -16,7 +16,9 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle, bracketMatching, indentOnInput } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { html } from '@codemirror/lang-html';
-import { DEFAULT_SETTINGS, readSettings, inspectSource, replaceBody, countWords, escapeText } from './document.js';
+import { markdown } from '@codemirror/lang-markdown';
+import { DEFAULT_SETTINGS, readSettings, inspectSource, replaceBody, countWords } from './document.js';
+import { detectFormat, toHTML, fromHTML } from './formats.js';
 import './style.css';
 import fragmentStyle from './document.css?inline';
 
@@ -50,10 +52,19 @@ const darkHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.modifier], color: '#c3a6ef' },
   { tag: [tags.number, tags.bool, tags.null], color: '#efb093' },
   { tag: [tags.angleBracket, tags.punctuation, tags.operator], color: '#b5bfcb' },
+  { tag: tags.heading, color: '#a8c7fa', fontWeight: '600' },
+  { tag: tags.strong, fontWeight: '600' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.link, color: '#84c9a2', textDecoration: 'underline' },
+  { tag: tags.monospace, color: '#e8c48c' },
 ]);
 const settings = readSettings({ getItem: key => localStorage.getItem(key) });
 let source = '';
 let filename = 'document.html';
+let formatPreference = 'auto';
+let formatHint = '';
+let currentFormat = 'html';
+let formatRefreshPending = false;
 let mode = 'rendered';
 let rich;
 let syncingRich = false;
@@ -68,6 +79,9 @@ let originalFrameAttributes;
 const draftKey = 'openwysiwyg.document';
 const externalChange = Annotation.define();
 const numberGutter = new Compartment();
+const sourceLanguage = new Compartment();
+const sourceAttributes = new Compartment();
+const formatNames = { html: 'HTML', markdown: 'Markdown', text: 'Plain text' };
 
 function notify(message, persistent = false) {
   clearTimeout(noticeTimer);
@@ -79,29 +93,64 @@ function notify(message, persistent = false) {
 try {
   if (settings.remember) {
     const draft = JSON.parse(localStorage.getItem(draftKey) || 'null');
-    if (draft && typeof draft.html === 'string') {
-      source = draft.html;
+    if (draft && (typeof draft.source === 'string' || typeof draft.html === 'string')) {
+      source = draft.source ?? draft.html;
       if (typeof draft.name === 'string') filename = draft.name;
+      if (['auto', 'html', 'markdown', 'text'].includes(draft.formatPreference)) formatPreference = draft.formatPreference;
+      if (typeof draft.formatHint === 'string') formatHint = draft.formatHint;
     }
   }
 } catch { notify('This browser cannot restore the saved draft.'); }
+currentFormat = formatPreference === 'auto' ? detectFormat(source, formatHint) : formatPreference;
+
+function languageFor(format) { return format === 'markdown' ? markdown({ htmlTagLanguage: html() }) : format === 'html' ? html() : []; }
+function editorAttributes() { return { 'aria-label': `${formatNames[currentFormat]} source`, spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }; }
+function outputHTML() { return toHTML(source, currentFormat); }
+
+function refreshFormat() {
+  const next = formatPreference === 'auto' ? detectFormat(source, formatHint) : formatPreference;
+  const changedFormat = next !== currentFormat;
+  currentFormat = next;
+  document.body.dataset.format = currentFormat;
+  $('#format-label').textContent = formatPreference === 'auto' && !source.trim() ? 'Auto detect' : `${formatPreference === 'auto' ? 'Detected' : 'Format'}: ${formatNames[currentFormat]}`;
+  $('#format-button').title = `${formatNames[currentFormat]} · ${formatPreference === 'auto' ? 'automatically detected' : 'manually selected'} — change input format`;
+  $('#format-select').value = formatPreference;
+  $('#source-button').textContent = currentFormat === 'text' ? 'Text' : formatNames[currentFormat];
+  $('#export-button').hidden = currentFormat === 'html';
+  if (changedFormat) {
+    richSource = null;
+    code.dispatch({ effects: [sourceLanguage.reconfigure(languageFor(currentFormat)), sourceAttributes.reconfigure(EditorView.contentAttributes.of(editorAttributes()))] });
+  }
+  if (mode === 'export') {
+    if (currentFormat === 'html') setMode('html', false);
+    else $('#generated-code').textContent = outputHTML();
+  }
+}
+
+function scheduleFormatRefresh() {
+  if (formatRefreshPending) return;
+  formatRefreshPending = true;
+  queueMicrotask(() => { formatRefreshPending = false; refreshFormat(); updateStatus(); });
+}
 
 const code = new EditorView({
   parent: $('#code-editor'),
   state: EditorState.create({
     doc: source,
     extensions: [
-      html(), history(), bracketMatching(), indentOnInput(),
+      sourceLanguage.of(languageFor(currentFormat)), history(), bracketMatching(), indentOnInput(),
       syntaxHighlighting(embedded ? darkHighlightStyle : defaultHighlightStyle),
       EditorView.theme({}, { dark: embedded }),
       EditorView.lineWrapping,
       numberGutter.of(settings.lines ? lineNumbers() : []),
-      placeholder('Paste or write HTML…'),
-      EditorView.contentAttributes.of({ 'aria-label': 'HTML source', spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
+      placeholder('Paste HTML, Markdown or text…'),
+      sourceAttributes.of(EditorView.contentAttributes.of(editorAttributes())),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.updateListener.of(update => {
         if (!update.docChanged || update.transactions.every(tr => tr.annotation(externalChange))) return;
         source = update.state.doc.toString();
+        if (update.transactions.some(tr => tr.isUserEvent('input.paste'))) formatHint = '';
+        scheduleFormatRefresh();
         changed();
         clearTimeout(syncTimer);
         if (mode === 'split') syncTimer = setTimeout(() => renderSource(), 220);
@@ -119,7 +168,7 @@ function saveDraft() {
   saved = false;
   if (settings.remember && !conflict) {
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ html: source, name: filename }));
+      localStorage.setItem(draftKey, JSON.stringify({ html: source, source, name: filename, formatPreference, formatHint }));
       saved = true;
     } catch { notify('Draft could not be saved. Enable File actions in Settings to download a copy.', true); }
   }
@@ -130,15 +179,16 @@ function changed() { saveDraft(); }
 
 function updateStatus() {
   if (settings.count) {
-    const words = countWords(source);
+    const words = countWords(outputHTML());
     $('#word-count').textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
     $('#save-state').textContent = settings.remember && saved ? 'Saved in this browser' : 'Not saved';
   }
 }
 
 function renderSource(resetUndo = false) {
+  refreshFormat();
   if (!rich || (richSource === source && !resetUndo)) return;
-  const parsed = inspectSource(source);
+  const parsed = inspectSource(outputHTML());
   document.body.dataset.documentKind = parsed.fullDocument ? 'full' : 'fragment';
   syncingRich = true;
   rich.setContent(parsed.body);
@@ -174,34 +224,39 @@ function richChanged() {
   const body = rich.getContent();
   if (body === renderedBody) return;
   renderedBody = body;
-  source = replaceBody(source, body);
+  source = currentFormat === 'html' ? replaceBody(source, body) : fromHTML(body, currentFormat);
   richSource = source;
   updateCode();
   changed();
+  scheduleFormatRefresh();
 }
 
 function setMode(next, focus = true) {
   if (next === 'split' && !settings.split) next = 'rendered';
+  if (next === 'export' && currentFormat === 'html') next = 'html';
   clearTimeout(syncTimer);
   // Never read stale rich content after typing in the source pane.
   if (mode === 'rendered') richChanged();
   mode = next;
-  if (mode !== 'html') renderSource();
+  if (mode !== 'html' && mode !== 'export') renderSource();
   updateCode();
   document.body.dataset.mode = mode;
-  $('#rendered-pane').hidden = mode === 'html';
+  $('#rendered-pane').hidden = mode === 'html' || mode === 'export';
   $('#html-pane').hidden = mode === 'rendered';
+  $('#code-editor').hidden = mode === 'export';
+  $('#generated-view').hidden = mode !== 'export';
+  if (mode === 'export') $('#generated-code').textContent = outputHTML();
   document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === mode)));
   requestAnimationFrame(() => {
     code.requestMeasure();
-    if (focus) { if (mode === 'html' || (mode === 'split' && settings.splitOrder === 'html-first')) code.focus(); else rich?.focus(); }
+    if (focus) { if (mode === 'export') $('#generated-code').focus(); else if (mode === 'html' || (mode === 'split' && settings.splitOrder === 'html-first')) code.focus(); else rich?.focus(); }
   });
 }
 
 function shortcut(event) {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'e') {
     event.preventDefault();
-    setMode(mode === 'html' ? 'rendered' : 'html');
+    setMode(mode === 'html' || mode === 'export' ? 'rendered' : 'html');
   }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 's') {
     event.preventDefault();
@@ -260,40 +315,55 @@ $('#reset-settings').addEventListener('click', () => {
   try { localStorage.setItem('openwysiwyg.settings', JSON.stringify(settings)); } catch { notify('Settings could not be saved in this browser.'); }
   saveDraft();
 });
+
+$('#format-button').addEventListener('click', () => $('#format-dialog').showModal());
+$('#close-format').addEventListener('click', () => $('#format-dialog').close());
+$('#format-select').addEventListener('change', event => {
+  formatPreference = event.target.value;
+  refreshFormat();
+  renderSource(true);
+  changed();
+});
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.view)));
 document.addEventListener('keydown', shortcut);
 if (/Mac|iPhone|iPad/.test(navigator.platform)) $('#shortcut-mod').textContent = '⌘';
 
-function download() {
-  const blob = new Blob([source], { type: 'text/html;charset=utf-8' });
+function download(asHTML = false) {
+  const format = asHTML ? 'html' : currentFormat;
+  const text = asHTML ? outputHTML() : source;
+  const extension = { html: '.html', markdown: '.md', text: '.txt' }[format];
+  const blob = new Blob([text], { type: { html: 'text/html', markdown: 'text/markdown', text: 'text/plain' }[format] + ';charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename.replace(/\.[^.]+$/, '') + '.html';
+  link.download = filename.replace(/\.[^.]+$/, '') + extension;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  saved = true;
+  if (!asHTML) saved = true;
 }
 
-function commitReplacement(html, name) {
-  source = html;
+function commitReplacement(text, name, hint = name) {
+  source = text;
   filename = name;
+  formatHint = hint;
+  formatPreference = 'auto';
   conflict = false;
+  refreshFormat();
   updateCode();
   renderSource(true);
   changed();
   setMode(mode);
 }
 
-function requestReplacement(html, name) {
-  if (!source.trim()) { commitReplacement(html, name); return; }
-  pendingReplacement = { html, name };
+function requestReplacement(text, name, hint = name) {
+  if (!source.trim()) { commitReplacement(text, name, hint); return; }
+  pendingReplacement = { text, name, hint };
   $('#replace-dialog').showModal();
 }
-$('#replace-download').addEventListener('click', download);
+$('#replace-download').addEventListener('click', () => download());
 $('#replace-cancel').addEventListener('click', () => $('#replace-dialog').close());
 $('#replace-confirm').addEventListener('click', () => {
-  if (pendingReplacement) commitReplacement(pendingReplacement.html, pendingReplacement.name);
+  if (pendingReplacement) commitReplacement(pendingReplacement.text, pendingReplacement.name, pendingReplacement.hint);
   pendingReplacement = null;
   $('#replace-dialog').close();
 });
@@ -305,20 +375,46 @@ $('#file-input').addEventListener('change', async event => {
   if (!file) return;
   if (file.size > 10 * 1024 * 1024) { notify('Please open a file smaller than 10 MB.'); return; }
   try {
-    let text = await file.text();
-    if (/\.txt$/i.test(file.name)) text = `<pre>${escapeText(text)}</pre>`;
-    requestReplacement(text, file.name);
+    requestReplacement(await file.text(), file.name);
   } catch { notify('This file could not be opened.'); }
 });
 
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', async () => {
+  if ($('#document-menu').matches(':popover-open')) $('#document-menu').hidePopover();
   switch (button.dataset.action) {
-    case 'new': requestReplacement('', 'document.html'); break;
+    case 'new': requestReplacement('', 'document.html', ''); break;
     case 'open': $('#file-input').click(); break;
     case 'download': download(); break;
+    case 'download-html': download(true); break;
     case 'copy':
-      try { await navigator.clipboard.writeText(source); notify('HTML copied.'); }
-      catch { setMode('html'); code.dispatch({ selection: { anchor: 0, head: code.state.doc.length } }); notify('Press Ctrl / ⌘ + C to copy the selected HTML.'); }
+      try { await navigator.clipboard.writeText(outputHTML()); notify('HTML code copied.'); }
+      catch {
+        if (currentFormat === 'html') {
+          setMode('html');
+          code.dispatch({ selection: { anchor: 0, head: code.state.doc.length } });
+        } else {
+          setMode('export');
+          const range = document.createRange();
+          range.selectNodeContents($('#generated-code'));
+          const selection = window.getSelection();
+          selection.removeAllRanges(); selection.addRange(range);
+        }
+        notify('HTML selected. Press Ctrl / ⌘ + C to copy.');
+      }
+      break;
+    case 'copy-markdown':
+      try { await navigator.clipboard.writeText(currentFormat === 'markdown' ? source : fromHTML(inspectSource(outputHTML()).body, 'markdown')); notify('Markdown copied.'); }
+      catch { notify('Clipboard access is unavailable. Use Download to keep your source.'); }
+      break;
+    case 'copy-formatted':
+      try {
+        const body = inspectSource(outputHTML()).body;
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([body], { type: 'text/html' }),
+          'text/plain': new Blob([fromHTML(body, 'text')], { type: 'text/plain' }),
+        })]);
+        notify('Formatted text copied.');
+      } catch { notify('Formatted copying is unavailable. Use Copy HTML code instead.'); }
       break;
   }
 }));
@@ -335,6 +431,7 @@ window.addEventListener('storage', event => {
   }
 });
 
+refreshFormat();
 applySettings();
 
 tinymce.init({
@@ -366,6 +463,23 @@ tinymce.init({
   paste_data_images: true,
   automatic_uploads: false,
   setup(editor) {
+    editor.on('paste', event => {
+      const plain = event.clipboardData?.getData('text/plain');
+      if (!plain) return;
+      const format = detectFormat(plain);
+      // Chat and code-copy buttons commonly include unrelated page HTML beside
+      // useful Markdown/source text. Prefer the explicit source in that case.
+      if (format === 'text') return;
+      event.preventDefault();
+      const selected = editor.selection.getContent({ format: 'text' }).replace(/\s/g, '');
+      const entire = editor.getBody().textContent.replace(/\s/g, '');
+      if (!source.trim() || (selected && selected === entire)) {
+        commitReplacement(plain, 'document.html', '');
+      } else {
+        editor.undoManager.transact(() => editor.insertContent(inspectSource(toHTML(plain, format)).body));
+        richChanged();
+      }
+    });
     editor.on('init', () => {
       rich = editor;
       renderSource(true);

@@ -189,7 +189,8 @@ input:focus-visible, [tabindex]:focus-visible {
 }
 
 body[data-mode='rendered'] #html-pane,
-body[data-mode='html'] #rendered-pane { display: none; }
+body[data-mode='html'] #rendered-pane,
+body[data-mode='export'] #rendered-pane { display: none; }
 
 .rendered-shell {
   display: flex;
@@ -523,4 +524,51 @@ body[data-embed='workbench'] .cm-matchingBracket { background: #354c40; }
   .workspace, #rendered-pane, .rendered-shell { display: block !important; height: auto; overflow: visible; padding: 0; }
   .tox .tox-editor-header { display: none !important; }
   .rendered-shell .tox.tox-tinymce { max-width: none; border: 0; box-shadow: none; }
+}
+
+/* One compact document menu, with the detected input format always visible. */
+.brand-group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+#format-button {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 0;
+  color: var(--muted); background: transparent; border: 0; font-size: 10px; line-height: 1.2; white-space: nowrap;
+}
+#format-button:hover { color: var(--text); }
+#format-button svg { width: 11px; height: 11px; }
+#format-label { overflow: hidden; text-overflow: ellipsis; }
+#file-actions { position: static; margin: 0; }
+#file-actions button { padding: 0 9px; }
+#document-menu {
+  position: fixed; inset: 62px 16px auto auto; margin: 0; min-width: 210px; max-width: calc(100vw - 32px);
+  padding: 5px; color: var(--text); background: var(--surface); border: 1px solid var(--strong-line);
+  border-radius: 8px; box-shadow: var(--shadow);
+}
+#document-menu button { display: block; width: 100%; padding: 10px 12px; text-align: left; color: inherit; background: transparent; border: 0; border-radius: 4px; font-size: 12px; }
+#document-menu button:hover { background: var(--surface-hover); }
+#document-menu hr { height: 1px; margin: 5px; border: 0; background: var(--line); }
+.format-controls { display: grid; gap: 12px; padding: 0 26px 24px; font-size: 13px; }
+.format-controls select { width: 100%; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--strong-line); border-radius: 6px; }
+.format-controls p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+#generated-view { display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100%; height: 100%; min-height: 0; }
+.generated-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.generated-actions button { padding: 6px 10px; color: var(--text); background: var(--surface-hover); border: 1px solid var(--line); border-radius: 5px; font-size: 12px; }
+#generated-code { margin: 0; padding: 20px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font: 13px/1.8 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; tab-size: 2; }
+body[data-embed='workbench'] .brand-group { gap: 4px; }
+body[data-embed='workbench'] #document-menu { top: 46px; }
+@media (max-width: 1000px) {
+  .app-header { gap: 10px; padding: 0 16px; }
+  #settings-button span { display: none; }
+  #settings-button { width: 34px; padding: 7px; }
+}
+@media (max-width: 760px) {
+  .app, body:has(#file-actions:not([hidden])) .app,
+  body[data-embed='workbench'] .app,
+  body[data-embed='workbench']:has(#file-actions:not([hidden])) .app { grid-template-rows: 92px minmax(0, 1fr) auto; }
+  .app-header, body[data-embed='workbench'] .app-header,
+  body:has(#file-actions:not([hidden])) .app-header { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 44px 40px; gap: 0 12px; padding: 4px 12px; align-content: center; }
+  .brand-group { grid-column: 1; grid-row: 1; gap: 4px; }
+  .header-actions { grid-column: 2; grid-row: 1; }
+  .view-switch { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
+  #document-menu, body[data-embed='workbench'] #document-menu { top: 46px; right: 12px; }
+  #file-actions, body[data-embed='workbench'] #file-actions { position: static; }
+  .format-controls { padding: 0 21px 20px; }
 }
