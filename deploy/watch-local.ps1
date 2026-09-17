@@ -24,6 +24,7 @@ try {
             if (-not (Test-Path -LiteralPath $deployment.node)) { throw 'The configured Node executable is missing.' }
             $env:HOST = '127.0.0.1'
             $env:HOSTS = '127.0.0.1'
+            $env:WORKBENCH_EMBED = '1'
             $env:PORT = '4321'
             $env:STATIC_ROOT = $published
             $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'

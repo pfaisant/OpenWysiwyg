@@ -13,12 +13,44 @@ import contentUi from 'tinymce/skins/ui/oxide/content.min.css?inline';
 import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
 import { EditorState, Compartment, Annotation } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentOnInput } from '@codemirror/language';
+import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle, bracketMatching, indentOnInput } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { html } from '@codemirror/lang-html';
 import { DEFAULT_SETTINGS, readSettings, inspectSource, replaceBody, countWords, escapeText } from './document.js';
 import './style.css';
+import fragmentStyle from './document.css?inline';
 
 const $ = selector => document.querySelector(selector);
+const embedded = new URLSearchParams(location.search).get('embed') === 'workbench';
+const workbenchOrigins = new Set(['http://127.0.0.1:4747', 'http://localhost:4747', 'http://[::1]:4747']);
+let workbenchOrigin;
+if (embedded) {
+  document.body.dataset.embed = 'workbench';
+  document.body.dataset.theme = 'dark';
+  try {
+    const origin = new URL(document.referrer).origin;
+    if (workbenchOrigins.has(origin)) workbenchOrigin = origin;
+  } catch { /* A direct visit has no parent origin. */ }
+}
+function announceReady() {
+  if (embedded && workbenchOrigin && window.parent !== window && document.body.dataset.ready === 'true') {
+    window.parent.postMessage({ type: 'openwysiwyg:ready' }, workbenchOrigin);
+  }
+}
+window.addEventListener('message', event => {
+  if (!embedded || event.source !== window.parent || !workbenchOrigins.has(event.origin) || event.data?.type !== 'openwysiwyg:connect') return;
+  workbenchOrigin = event.origin;
+  announceReady();
+});
+const darkHighlightStyle = HighlightStyle.define([
+  { tag: tags.tagName, color: '#84c9a2' },
+  { tag: [tags.attributeName, tags.propertyName], color: '#a8c7fa' },
+  { tag: [tags.string, tags.attributeValue], color: '#e8c48c' },
+  { tag: tags.comment, color: '#8b96a5' },
+  { tag: [tags.keyword, tags.modifier], color: '#c3a6ef' },
+  { tag: [tags.number, tags.bool, tags.null], color: '#efb093' },
+  { tag: [tags.angleBracket, tags.punctuation, tags.operator], color: '#b5bfcb' },
+]);
 const settings = readSettings({ getItem: key => localStorage.getItem(key) });
 let source = '';
 let filename = 'document.html';
@@ -60,7 +92,8 @@ const code = new EditorView({
     doc: source,
     extensions: [
       html(), history(), bracketMatching(), indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(embedded ? darkHighlightStyle : defaultHighlightStyle),
+      EditorView.theme({}, { dark: embedded }),
       EditorView.lineWrapping,
       numberGutter.of(settings.lines ? lineNumbers() : []),
       placeholder('Paste or write HTML…'),
@@ -106,6 +139,7 @@ function updateStatus() {
 function renderSource(resetUndo = false) {
   if (!rich || (richSource === source && !resetUndo)) return;
   const parsed = inspectSource(source);
+  document.body.dataset.documentKind = parsed.fullDocument ? 'full' : 'fragment';
   syncingRich = true;
   rich.setContent(parsed.body);
   const doc = rich.getDoc();
@@ -117,6 +151,13 @@ function renderSource(resetUndo = false) {
       if (value === null) element.removeAttribute(name); else element.setAttribute(name, value);
     }
   });
+  let baseStyle = doc.getElementById('document-base-css');
+  if (!baseStyle) { baseStyle = doc.createElement('style'); baseStyle.id = 'document-base-css'; doc.head.append(baseStyle); }
+  // Full documents use browser defaults and their own CSS; fragment documents
+  // get readable editing defaults. Neither stylesheet becomes part of the HTML.
+  baseStyle.textContent = parsed.fullDocument
+    ? 'html { background: #fff; color-scheme: light; } body { font-family: revert; } table { border-collapse: revert; } .mce-content-body { overflow-wrap: normal; word-wrap: normal; }'
+    : fragmentStyle;
   let style = doc.getElementById('document-css');
   if (!style) { style = doc.createElement('style'); style.id = 'document-css'; doc.head.append(style); }
   style.textContent = parsed.css;
@@ -301,7 +342,7 @@ tinymce.init({
   license_key: 'gpl',
   skin: false,
   content_css: false,
-  content_style: `${contentUi}\nhtml { min-height: 100%; background: #fff; } body { box-sizing: border-box; max-width: 820px; margin: 0 auto; padding: 54px 56px 100px; color: #252823; font: 17px/1.7 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; } h1,h2,h3,h4 { font-family: system-ui,sans-serif; line-height:1.25; letter-spacing:-.025em; } h1 { font-size: 34px; } p { margin:0 0 1em; } a { color:#405e75; } img,video { max-width:100%; height:auto; } table { max-width:100%; border-collapse:collapse; } td,th { border:1px solid #d9ddd6; padding:8px; overflow-wrap:anywhere; } pre { white-space:pre-wrap; font-size:14px; padding:16px; background:#f5f5f3; } blockquote { border-left:2px solid #d6dbd2; margin-left:0; padding-left:20px; } .mce-content-body[data-mce-placeholder]:not(.mce-visualblocks)::before { color:#a1a49d; font-family:system-ui,sans-serif; font-size:16px; font-weight:400; } @media(max-width:600px) { body { padding:28px 24px 70px; } }`,
+  content_style: `${contentUi}\n.mce-content-body[data-mce-placeholder]:not(.mce-visualblocks)::before { color:#939990; font-family:system-ui,sans-serif; font-size:16px; font-weight:400; }`,
   iframe_attrs: { title: 'Rendered document', sandbox: 'allow-same-origin' },
   content_security_policy: "default-src 'none'; img-src data: blob: https: http:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; form-action 'none'; base-uri 'none'",
   plugins: 'lists advlist link image table searchreplace',
@@ -316,6 +357,7 @@ tinymce.init({
   height: '100%',
   highlight_on_focus: false,
   browser_spellcheck: false,
+  visual: false,
   object_resizing: true,
   convert_urls: false,
   link_default_target: '_blank',
@@ -329,6 +371,7 @@ tinymce.init({
       renderSource(true);
       editor.getDoc().addEventListener('keydown', shortcut);
       document.body.dataset.ready = 'true';
+      announceReady();
     });
     editor.on('input change undo redo', richChanged);
     editor.on('focus', () => { if (mode === 'split') { clearTimeout(syncTimer); renderSource(); } });

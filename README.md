@@ -18,6 +18,14 @@ document scripts. Visual edits sanitize and rewrite the document body, so unsupp
 or unsafe markup can change when you edit visually. HTML mode remains available
 for working on the original source directly.
 
+Complete HTML documents render with their own styles and browser defaults, using
+the full pane width. HTML fragments get a simple sans-serif editing style. Editor
+padding and typography are never written into your source.
+
+The local Workbench tool embeds the editor in place, with compact dark controls
+and a document canvas that keeps the document's own colors. See
+[local deployment](deploy/README.md#windows-local-deployment-and-workbench).
+
 ## Development
 
 Requires Node.js 22.12 or newer and npm.

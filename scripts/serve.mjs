@@ -48,6 +48,7 @@ const securityHeaders = {
   'Referrer-Policy': 'no-referrer',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
+const workbenchFrameAncestors = 'http://127.0.0.1:4747 http://localhost:4747 http://[::1]:4747';
 
 function contained(root, path) {
   const child = relative(root, path);
@@ -66,7 +67,7 @@ function reply(req, res, status, message, extra = {}) {
   res.end(req.method === 'HEAD' ? undefined : body);
 }
 
-export async function createStaticServer({ root = resolve(projectRoot, 'dist') } = {}) {
+export async function createStaticServer({ root = resolve(projectRoot, 'dist'), workbenchEmbed = false } = {}) {
   const realRoot = await realpath(root);
   return http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -74,8 +75,11 @@ export async function createStaticServer({ root = resolve(projectRoot, 'dist') }
       return;
     }
     let pathname;
+    let embedded = false;
     try {
-      pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      const url = new URL(req.url, 'http://localhost');
+      pathname = decodeURIComponent(url.pathname);
+      embedded = workbenchEmbed && (pathname === '/' || pathname === '/index.html') && url.searchParams.get('embed') === 'workbench';
       if (pathname.includes('\0') || pathname.includes('\\') || pathname.split('/').some((part) => part === '..' || part.startsWith('.'))) {
         reply(req, res, 400, 'Invalid path');
         return;
@@ -110,6 +114,10 @@ export async function createStaticServer({ root = resolve(projectRoot, 'dist') }
         'Content-Length': info.size,
         'Cache-Control': immutableAsset ? 'public, max-age=31536000, immutable' : 'no-store',
       };
+      if (embedded) {
+        headers['Content-Security-Policy'] = securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'", `frame-ancestors ${workbenchFrameAncestors}`);
+        delete headers['X-Frame-Options'];
+      }
       if (ext === '.zip') headers['Content-Disposition'] = `attachment; filename="${basename(realFile).replace(/[^a-zA-Z0-9._-]/g, '_')}"`;
       res.writeHead(200, headers);
       if (req.method === 'HEAD') {
@@ -138,7 +146,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     process.exit(code);
   };
   for (const host of hosts) {
-    const server = await createStaticServer({ root: process.env.STATIC_ROOT || resolve(projectRoot, 'dist') });
+    const server = await createStaticServer({ root: process.env.STATIC_ROOT || resolve(projectRoot, 'dist'), workbenchEmbed: process.env.WORKBENCH_EMBED === '1' });
     servers.push(server);
     server.on('error', (error) => { console.error(error.message); void close(1); });
     server.listen(port, host, () => console.log(`OpenWysiwyg: http://${host.includes(':') ? `[${host}]` : host}:${port}`));

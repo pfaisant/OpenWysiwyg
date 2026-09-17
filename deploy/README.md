@@ -33,11 +33,15 @@ current process IDs are under `%LOCALAPPDATA%\OpenWysiwyg`. The supervisor binds
 only to `127.0.0.1`. It does not discover or bind to Tailscale or LAN addresses.
 Installation does not add a firewall rule or public network listener.
 
-Workbench's **Tools → OpenWysiwyg** always opens `http://127.0.0.1:4321/` on the
-device running the browser. It has no public-site link or remote-machine fallback.
-The editor must be installed locally on that device. A matching Windows tray
+Workbench's **Tools → OpenWysiwyg** embeds `http://127.0.0.1:4321/?embed=workbench`
+directly in its workspace. The editor must be installed on the device running the
+browser, and Workbench must also be opened at localhost. The local supervisor enables
+`WORKBENCH_EMBED=1`: only the embed entry page permits framing, and only by
+`http://127.0.0.1:4747`, `http://localhost:4747` or `http://[::1]:4747`.
+Other pages keep framing disabled. There is no remote-machine fallback.
+Drafts use the same browser storage as the standalone local editor. A matching Windows tray
 command is prepared in Workbench's source; installing the updated tray executable
-is still pending. Drafts stay in the local browser.
+is still pending.
 The Workbench catalogue is `C:\Users\paul.faisant\workbench\tools.json`.
 
 Republish with the same install command. To stop the local server and remove its

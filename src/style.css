@@ -471,6 +471,51 @@ kbd {
   *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
 }
 
+/* An embedded editor fills the existing Workbench workspace. Its controls follow
+   the host's dark palette; document colors belong to the document itself. */
+body[data-embed='workbench'] {
+  --canvas: #0d0f11;
+  --surface: #14171a;
+  --surface-hover: #20262c;
+  --surface-active: #283139;
+  --text: #e2e7ed;
+  --muted: #9aa8b8;
+  --line: #292e35;
+  --strong-line: #454f5b;
+  --focus: #21c66a;
+}
+body[data-embed='workbench'] .app { grid-template-rows: 48px minmax(0, 1fr) auto; }
+body[data-embed='workbench'] .app-header { gap: 12px; padding: 0 16px; }
+body[data-embed='workbench'] .brand { font-size: 13px; letter-spacing: -.3px; }
+body[data-embed='workbench'] .view-switch { padding: 2px; border-radius: 6px; }
+body[data-embed='workbench'] .view-switch button { min-height: 28px; }
+body[data-embed='workbench'] .rendered-shell,
+body[data-document-kind='full'] .rendered-shell { padding: 0; }
+body[data-embed='workbench'] .rendered-shell .tox.tox-tinymce,
+body[data-document-kind='full'] .rendered-shell .tox.tox-tinymce {
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color-scheme: light;
+}
+body[data-embed='workbench'] #code-editor .cm-content { padding-top: 20px; }
+body[data-embed='workbench'] #code-editor .cm-line { padding-left: 20px; padding-right: 20px; }
+body[data-embed='workbench'] .cm-cursor { border-left-color: var(--text); }
+body[data-embed='workbench'] .cm-selectionBackground,
+body[data-embed='workbench'] .cm-focused .cm-selectionBackground { background: #35513f !important; }
+body[data-embed='workbench'] .cm-content ::selection { background: #35513f; }
+body[data-embed='workbench'] .cm-searchMatch { background: #786327; }
+body[data-embed='workbench'] .cm-matchingBracket { background: #354c40; }
+@media (max-width: 760px) {
+  body[data-embed='workbench']:has(#file-actions:not([hidden])) .app { grid-template-rows: 88px minmax(0, 1fr) auto; }
+  body[data-embed='workbench'] #file-actions { top: 50px; }
+}
+@media (max-width: 420px) {
+  body[data-embed='workbench'] .app-header { gap: 8px; padding: 0 10px; }
+  body[data-embed='workbench'] .brand { font-size: 12px; }
+}
+
 @media print {
   body { overflow: visible; background: #fff; }
   .app { display: block; height: auto; }

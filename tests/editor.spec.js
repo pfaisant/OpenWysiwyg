@@ -331,6 +331,137 @@ test('full document head, styles and body attributes survive a visual edit', asy
   expect(actual).toContain('Bonjour Paul');
 });
 
+test('full documents retain authored layout and typography without added page or table styling', async ({ page }) => {
+  await openEditor(page);
+  const raw = '<!doctype html>\n<html lang="en"><head><style>body{margin:13px 17px;width:calc(100% - 34px);font:15px/1.4 Arial,sans-serif;color:rgb(31,42,53)}table{width:100%;border-collapse:separate;border-spacing:4px;table-layout:fixed}h1{font-size:24px}</style></head><body><h1>Authored document</h1><p>Keep this layout.</p><table><tr><td>First cell</td><td>Second cell</td></tr></table></body></html>\n';
+  await writeSource(page, raw);
+  await view(page, 'Rendered');
+  await expect(visualBody(page)).toHaveCSS('margin-top', '13px');
+  await expect(visualBody(page)).toHaveCSS('margin-left', '17px');
+  await expect(visualBody(page)).toHaveCSS('padding-top', '0px');
+  await expect(visualBody(page)).toHaveCSS('padding-left', '0px');
+  await expect(visualBody(page)).toHaveCSS('max-width', 'none');
+  await expect(visualBody(page)).toHaveCSS('font-size', '15px');
+  await expect(rendered(page).locator('h1')).toHaveCSS('font-family', 'Arial, sans-serif');
+  await expect(rendered(page).locator('table')).toHaveCSS('border-collapse', 'separate');
+  await expect(rendered(page).locator('table')).toHaveCSS('table-layout', 'fixed');
+  await expect(rendered(page).locator('td').first()).toHaveCSS('border-top-width', '0px');
+  await expect(rendered(page).locator('td').first()).toHaveCSS('padding-top', '1px');
+  const widths = await visualBody(page).evaluate(body => ({ body: body.getBoundingClientRect().width, viewport: body.ownerDocument.documentElement.clientWidth }));
+  expect(widths.body).toBeCloseTo(widths.viewport - 34, 0);
+  const pane = await page.locator('#rendered-pane').boundingBox();
+  const frame = await page.locator('iframe[title="Rendered document"]').boundingBox();
+  expect(Math.abs(frame.x - pane.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(frame.width - pane.width)).toBeLessThanOrEqual(1);
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(raw);
+});
+
+test('an unstyled full document uses browser defaults and remains exact when switching', async ({ page }) => {
+  await openEditor(page);
+  const raw = '<!DOCTYPE html>\n<html><head><title>Native defaults</title></head><body><h1>Heading</h1><p>Unstyled paragraph.</p><table><tr><td>No imposed border</td></tr></table></body></html>';
+  await writeSource(page, raw);
+  await view(page, 'Rendered');
+  await expect(visualBody(page)).toHaveCSS('margin', '8px');
+  await expect(visualBody(page)).toHaveCSS('padding', '0px');
+  await expect(visualBody(page)).toHaveCSS('max-width', 'none');
+  await expect(visualBody(page)).toHaveCSS('font-size', '16px');
+  const fonts = await visualBody(page).evaluate(body => ({ body: getComputedStyle(body).fontFamily, heading: getComputedStyle(body.querySelector('h1')).fontFamily }));
+  expect(fonts.body).not.toContain('Georgia');
+  expect(fonts.heading).toBe(fonts.body);
+  await expect(rendered(page).locator('table')).toHaveCSS('border-collapse', 'separate');
+  await expect(rendered(page).locator('td')).toHaveCSS('border-top-width', '0px');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(raw);
+});
+
+test('fragments have readable defaults after replacing a styled full document', async ({ page }) => {
+  await openEditor(page);
+  await writeSource(page, '<!doctype html><html style="font-size:32px"><body style="margin:0;font:12px monospace;background:rgb(250,0,0)"><p>Old document</p></body></html>');
+  await view(page, 'Rendered');
+  await expect(visualBody(page)).toHaveCSS('background-color', 'rgb(250, 0, 0)');
+  const fragment = '<h2>A new fragment</h2>\n<p>Readable without configuring anything.</p>';
+  await writeSource(page, fragment);
+  await view(page, 'Rendered');
+  const style = await visualBody(page).evaluate(body => {
+    const css = getComputedStyle(body);
+    return { font: css.fontFamily, size: parseFloat(css.fontSize), padding: parseFloat(css.paddingLeft), line: parseFloat(css.lineHeight), background: css.backgroundColor };
+  });
+  expect(style.font).toMatch(/sans-serif|system-ui/i);
+  expect(style.size).toBe(16);
+  expect(style.line).toBeGreaterThanOrEqual(22);
+  expect(style.padding).toBeGreaterThanOrEqual(16);
+  expect(style.padding).toBeLessThanOrEqual(40);
+  expect(style.background).not.toBe('rgb(250, 0, 0)');
+  await expect(rendered(page).locator('h2')).toHaveText('A new fragment');
+  await view(page, 'HTML');
+  expect(await sourceText(page)).toBe(fragment);
+});
+
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`embedded editor keeps compact chrome and usable full-document rendering at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/?embed=workbench');
+    await expect(page.locator('body')).toHaveAttribute('data-ready', 'true');
+    const header = await page.locator('.app-header').boundingBox();
+    expect(header.height).toBeLessThanOrEqual(52);
+    const headerColor = await page.locator('.app-header').evaluate(node => getComputedStyle(node).backgroundColor.match(/\d+/g).slice(0, 3).map(Number));
+    expect(Math.max(...headerColor)).toBeLessThan(80);
+    await noHorizontalOverflow(page);
+    const raw = '<!doctype html><html><head><style>body{margin:0;background:white;font:16px Arial,sans-serif}main{padding:16px}table{width:100%;table-layout:fixed}td{overflow-wrap:anywhere}</style></head><body><main><h1>Responsive document</h1><table><tr><td>First column</td><td>Second column</td></tr></table><p>All of the available pane width.</p></main></body></html>';
+    await writeSource(page, raw);
+    await view(page, 'Rendered');
+    await expect(visualBody(page)).toHaveCSS('margin', '0px');
+    await expect(visualBody(page)).toHaveCSS('padding', '0px');
+    await expect(visualBody(page)).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await noHorizontalOverflow(page);
+    const pane = await page.locator('#rendered-pane').boundingBox();
+    const frame = await page.locator('iframe[title="Rendered document"]').boundingBox();
+    expect(Math.abs(frame.width - pane.width)).toBeLessThanOrEqual(1);
+    const docWidth = await visualBody(page).evaluate(body => ({ scroll: body.ownerDocument.documentElement.scrollWidth, width: body.ownerDocument.documentElement.clientWidth }));
+    expect(docWidth.scroll).toBeLessThanOrEqual(docWidth.width + 1);
+    const screenshot = testInfo.outputPath(`embedded-rendering-${viewport.width}x${viewport.height}.png`);
+    await page.screenshot({ path: screenshot });
+    await testInfo.attach('Embedded full-document rendering', { path: screenshot, contentType: 'image/png' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeVisible();
+    await noHorizontalOverflow(page);
+    for (const name of ['toolbar', 'split', 'files', 'count', 'lines']) await page.locator(`input[name="${name}"]`).check();
+    await noHorizontalOverflow(page);
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await view(page, 'Split');
+    await expectSplitOrder(page, 'rendered-first', viewport.width < 640);
+    await noHorizontalOverflow(page);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Close settings', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await view(page, 'HTML');
+    expect(await sourceText(page)).toBe(raw);
+  });
+}
+
+test('Workbench receives readiness from the embedded local editor without a new tab', async ({ page, context }) => {
+  const editorOrigin = new URL(test.info().project.use.baseURL).origin;
+  const harness = 'http://127.0.0.1:4747/__openwysiwyg-embed-test';
+  // A fulfilled test route has no local network address space in Chromium.
+  // Allow that synthetic parent to reach the real loopback editor.
+  await context.grantPermissions(['local-network-access'], { origin: new URL(harness).origin });
+  await page.route(harness, route => route.fulfill({
+    contentType: 'text/html',
+    body: `<!doctype html><html><body style="margin:0"><iframe id="editor" title="Embedded editor" src="${editorOrigin}/?embed=workbench" style="width:100vw;height:100vh;border:0"></iframe><script>window.editorMessages=[];const frame=document.getElementById('editor');addEventListener('message',event=>{if(event.source===frame.contentWindow&&event.origin===${JSON.stringify(editorOrigin)})window.editorMessages.push(event.data)});frame.addEventListener('load',()=>frame.contentWindow.postMessage({type:'openwysiwyg:connect'},${JSON.stringify(editorOrigin)}));</script></body></html>`,
+  }));
+  await page.goto(harness);
+  const editor = page.frameLocator('#editor');
+  await expect(editor.locator('body')).toHaveAttribute('data-ready', 'true');
+  await expect.poll(() => page.evaluate(() => window.editorMessages.some(message => message.type === 'openwysiwyg:ready'))).toBe(true);
+  await editor.getByRole('button', { name: 'HTML', exact: true }).click();
+  await editor.locator('.cm-content').fill('<p>Edited inside Workbench.</p>');
+  await editor.getByRole('button', { name: 'Rendered', exact: true }).click();
+  await expect(editor.frameLocator('iframe[title="Rendered document"]').locator('p')).toHaveText('Edited inside Workbench.');
+  expect(page.url()).toBe(harness);
+  expect(context.pages()).toHaveLength(1);
+});
+
 test('opening HTML, downloading, and cancelling New preserve the document', async ({ page }) => {
   await openEditor(page);
   await setOptions(page, ['files']);

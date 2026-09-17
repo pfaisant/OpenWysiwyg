@@ -18,6 +18,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'node scripts/serve.mjs',
+    env: { WORKBENCH_EMBED: '1' },
     url: 'http://127.0.0.1:4321',
     reuseExistingServer: !process.env.CI,
     timeout: 20_000,
